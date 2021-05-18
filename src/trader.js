@@ -66,278 +66,193 @@ socket.on("message", (message) => {
     console.log(colors.magenta("NBT Message: " + message))
 })
 
-socket.on("buy_signal", async (signal) => {
-    const tresult = _.findIndex(
-        tradingData.user_payload,
-        (o) => o.stratid == signal.stratid
+
+
+const log = {
+  buyLong(signal) {
+    console.log(
+      colors.grey(
+        "BUY_SIGNAL :: ENTER LONG TRADE ::",
+        signal.stratname,
+        signal.stratid,
+        signal.pair
+      )
     )
-    if (tresult > -1) {
-        if (!tradingData.trading_pairs[signal.pair + signal.stratid] && signal.new) {
-            console.log(
-                colors.grey(
-                    "BUY_SIGNAL :: ENTER LONG TRADE ::",
-                    signal.stratname,
-                    signal.stratid,
-                    signal.pair
-                )
-            )
-            //notify
-            notifier.notifyEnterLongSignal(signal)
+  },
+  buyCoverShort(signal) {
+    console.log(
+      colors.grey(
+        "BUY_SIGNAL :: BUY TO COVER SHORT TRADE ::",
+        signal.stratname,
+        signal.stratid,
+        signal.pair
+      )
+    )
+  },
+  buyPair(ledger, signal) {
+    console.log(
+      signal.pair,
+      " ===> BUY",
+      signal.price,
+      Number(ledger.getUserPayload(signal).buy_amount)
+    )
+  },
+  buyQtyPair(qty, pair) {
+    console.log("Market Buy ==> " + qty + " - " + pair)
+  },
+  buyError(error, signal, qty, isMarginPair) {
+    isMarginPair ?
+      console.log("ERROR 3355333", error.body)
+      :
+      console.log(
+        "ERROR 7991117 marketBuy",
+        signal.pair,
+        Number(qty),
+        error.body
+      )
+  },
+  buyCoverError(error, signal, qty) {
+    console.log(
+      "ERROR 6 ",
+      signal.pair,
+      Number(qty),
+      error.body
+    )
+  },
+  buyAgain(signal) {
+    console.log(
+      "BUY AGAIN",
+      JSON.stringify(signal),
+      tradingData.trading_types[signal.pair + signal.stratid]
+    )
+  }
+}
 
-            console.log(
-                signal.pair,
-                " ===> BUY",
-                signal.price,
-                Number(tradingData.user_payload[tresult].buy_amount)
-            )
+const getAltCoin = signal => signal.pair.replace("BTC", "");
 
-            const alt = signal.pair.replace("BTC", "")
-            if (tradingData.minimums[alt + "BTC"] && tradingData.minimums[alt + "BTC"].minQty) {
-                const buy_amount = new BigNumber(
-                    tradingData.user_payload[tresult].buy_amount
-                )
-                const btc_qty = buy_amount.dividedBy(signal.price)
-                const qty = bnb_client.roundStep(
-                    btc_qty,
-                    tradingData.minimums[alt + "BTC"].stepSize
-                )
-                console.log("Market Buy ==> " + qty + " - " + alt + "BTC")
-                ////
-                const traded_buy_signal = {
-                    key: bva_key,
-                    stratname: signal.stratname,
-                    stratid: signal.stratid,
-                    trading_type: tradingData.user_payload[tresult].trading_type,
-                    pair: signal.pair,
-                    qty: qty,
-                }
-                ////
-                if (tradingData.user_payload[tresult].trading_type === "real") {
-                    if (tradingData.margin_pairs.includes(alt + "BTC")) {
-                        const job = async () => {
-                            return new Promise((resolve, reject) => {
-                                bnb_client.mgMarketBuy(
-                                    alt + "BTC",
-                                    Number(qty),
-                                    (error, response) => {
-                                        if (error) {
-                                            console.log("ERROR 3355333", error.body)
-                                            reject(error)
-                                            return
-                                        }
+const getPair = signal => signal.pair;
 
-                                        //////
-                                        tradingData.trading_pairs[signal.pair + signal.stratid] = true
-                                        tradingData.trading_types[signal.pair + signal.stratid] = "LONG"
-                                        tradingData.open_trades[signal.pair + signal.stratid] = true
-                                        tradingData.trading_qty[signal.pair + signal.stratid] = Number(qty)
-                                        //////
+const getTradeSignal = (ledger, signal) => ({
+  key: bva_key,
+  stratname: signal.stratname,
+  stratid: signal.stratid,
+  trading_type: ledger.getTradingType(signal),
+  pair: signal.pair,
+  qty: qty,
+})
 
-                                        console.log("SUCCESS 222444222")
-                                        socket.emit(
-                                            "traded_buy_signal",
-                                            traded_buy_signal
-                                        )
-                                        notifier.notifyEnterLongTraded(signal)
-                                        resolve(true)
-                                    }
-                                )
-                            })
-                        }
+const emitSignal = (ledger, signal) => {
+  socket.emit("traded_buy_signal", getTradeSignal(ledger, signal));
+  notifier.notifyEnterLongTraded(signal)
+}
 
-                        const task = new Task(job)
-                        tradeQueue.addToQueue(task)
-                    } else {
-                        const job = async () => {
-                            return new Promise((resolve, reject) => {
-                                bnb_client.marketBuy(
-                                    alt + "BTC",
-                                    Number(qty),
-                                    (error, response) => {
-                                        if (error) {
-                                            console.log(
-                                                "ERROR 7991117 marketBuy",
-                                                alt + "BTC",
-                                                Number(qty),
-                                                error.body
-                                            )
-                                            reject(error)
-                                            return
-                                        }
+const registerLongTrade = (ledger, signal, qty) => {
+  ledger.registerLongTrade(signal, qty)
+  emitSignal(ledger, signal);
+}
 
-                                        //////
-                                        tradingData.trading_pairs[signal.pair + signal.stratid] = true
-                                        tradingData.trading_types[signal.pair + signal.stratid] = "LONG"
-                                        tradingData.open_trades[signal.pair + signal.stratid] = true
-                                        tradingData.trading_qty[signal.pair + signal.stratid] = Number(qty)
-                                        //////
+const registerLongCoverTrade = (ledger, signal) => {
+  ledger.removeTrade(signal)
+  emitSignal(ledger, signal);
+}
 
-                                        console.log(
-                                            "SUCESS 99111 marketBuy",
-                                            alt + "BTC",
-                                            Number(qty)
-                                        )
-                                        socket.emit(
-                                            "traded_buy_signal",
-                                            traded_buy_signal
-                                        )
-                                        notifier.notifyEnterLongTraded(signal)
-                                        resolve(true)
-                                    }
-                                )
-                            })
-                        }
+const marketBuy = (ledger, signal, qty) => {
+  const isMarginPair = ledger.getMarginPair(getPair(signal.pair));
+  const job = async () => {
+    return new Promise((resolve, reject) => {
+      bnb_client[isMarginPair ? 'mgMarketBuy' : 'marketBuy'](
+        getPair(signal.pair),
+        Number(qty),
+        (error, response) => {
+          if (error) {
+            log.buyError(error, signal, qty, isMarginPair);
+            return reject(error)
+          }
 
-                        const task = new Task(job)
-                        tradeQueue.addToQueue(task)
-                    }
-                } else {
-                    // VIRTUAL TRADE
-
-                    //////
-                    tradingData.trading_pairs[signal.pair + signal.stratid] = true
-                    tradingData.trading_types[signal.pair + signal.stratid] = "LONG"
-                    tradingData.open_trades[signal.pair + signal.stratid] = true
-                    tradingData.trading_qty[signal.pair + signal.stratid] = Number(qty)
-                    //////
-
-                    socket.emit("traded_buy_signal", traded_buy_signal)
-                    notifier.notifyEnterLongTraded(signal)
-                }
-            } else {
-                console.log("PAIR UNKNOWN", alt)
-            }
-            //////
-        } else if (
-            tradeShortEnabled &&
-            tradingData.trading_types[signal.pair + signal.stratid] === "SHORT" &&
-            tradingData.trading_qty[signal.pair + signal.stratid] &&
-            !signal.new &&
-            tradingData.open_trades[signal.pair + signal.stratid]
-        ) {
-            console.log(
-                colors.grey(
-                    "BUY_SIGNAL :: BUY TO COVER SHORT TRADE ::",
-                    signal.stratname,
-                    signal.stratid,
-                    signal.pair
-                )
-            )
-            //notify
-            notifier.notifyBuyToCoverSignal(signal)
-            //////
-            console.log(
-                signal.pair,
-                " ---> BUY",
-                Number(tradingData.trading_qty[signal.pair + signal.stratid])
-            )
-
-            const alt = signal.pair.replace("BTC", "")
-            if (tradingData.minimums[alt + "BTC"].minQty) {
-                const qty = Number(
-                    tradingData.trading_qty[signal.pair + signal.stratid]
-                )
-                console.log(
-                    "QTY ====mgMarketBuy===> " + qty + " - " + alt + "BTC"
-                )
-                /////
-                const traded_buy_signal = {
-                    key: bva_key,
-                    stratname: signal.stratname,
-                    stratid: signal.stratid,
-                    trading_type: tradingData.user_payload[tresult].trading_type,
-                    pair: signal.pair,
-                    qty: qty,
-                }
-                /////
-                if (tradingData.user_payload[tresult].trading_type === "real") {
-                    const job = async () => {
-                        return new Promise((resolve, reject) => {
-                            bnb_client.mgMarketBuy(
-                                alt + "BTC",
-                                Number(qty),
-                                (error, response) => {
-                                    if (error) {
-                                        console.log(
-                                            "ERROR 6 ",
-                                            alt,
-                                            Number(qty),
-                                            error.body
-                                        )
-
-                                        reject(error)
-                                        return
-                                    }
-
-                                    //////
-                                    delete tradingData.trading_pairs[signal.pair + signal.stratid]
-                                    delete tradingData.trading_types[signal.pair + signal.stratid]
-                                    delete tradingData.buy_prices[signal.pair + signal.stratid]
-                                    delete tradingData.sell_prices[signal.pair + signal.stratid]
-                                    delete tradingData.trading_qty[signal.pair + signal.stratid]
-                                    delete tradingData.open_trades[signal.pair + signal.stratid]
-                                    //////
-
-                                    socket.emit(
-                                        "traded_buy_signal",
-                                        traded_buy_signal
-                                    )
-                                    notifier.notifyBuyToCoverTraded(signal)
-
-                                    console.log("---+-- mgRepay ---+--")
-                                    bnb_client.mgRepay(
-                                        alt,
-                                        Number(qty),
-                                        (error, response) => {
-                                            if (error) {
-                                                console.log(
-                                                    "ERROR 244343333",
-                                                    alt,
-                                                    Number(qty),
-                                                    error.body
-                                                )
-
-                                                reject(error)
-                                                return
-                                            }
-                                            console.log("SUCCESS 333342111")
-
-                                            resolve(true)
-                                        }
-                                    )
-                                }
-                            )
-                        })
-                    }
-
-                    const task = new Task(job)
-                    tradeQueue.addToQueue(task)
-                } else {
-                    // VIRTUAL TRADE
-
-                    //////
-                    delete tradingData.trading_pairs[signal.pair + signal.stratid]
-                    delete tradingData.trading_types[signal.pair + signal.stratid]
-                    delete tradingData.buy_prices[signal.pair + signal.stratid]
-                    delete tradingData.sell_prices[signal.pair + signal.stratid]
-                    delete tradingData.trading_qty[signal.pair + signal.stratid]
-                    delete tradingData.open_trades[signal.pair + signal.stratid]
-                    //////
-
-                    socket.emit("traded_buy_signal", traded_buy_signal)
-                    notifier.notifyBuyToCoverTraded(signal)
-                }
-            } else {
-                console.log("PAIR UNKNOWN", alt)
-            }
-        } else {
-            console.log(
-                "BUY AGAIN",
-                JSON.stringify(signal),
-                tradingData.trading_types[signal.pair + signal.stratid]
-            )
+          console.log("SUCCESS 222444222")
+          registerLongTrade(ledger, signal, qty);
+          resolve(true)
         }
-    }
+      )
+    })
+  }
+
+  const task = new Task(job)
+  tradeQueue.addToQueue(task)
+}
+
+const marketCoverBuy = (ledger, signal, qty) => {
+  const job = async () => {
+    return new Promise((resolve, reject) => {
+      bnb_client.mgMarketBuy(
+        getPair(signal.pair),
+        Number(qty),
+        (error, response) => {
+          if (error) {
+            log.buyCoverError(error, signal, qty);
+            return reject(error);
+          }
+
+          registerLongCoverTrade(ledger, signal)
+
+          console.log("---+-- mgRepay ---+--")
+          bnb_client.mgRepay(getAltCoin(getPair(signal.pair)), Number(qty), (error, response) => {
+              if (error) {
+                console.log("ERROR 244343333", alt, Number(qty), error.body);
+                return reject(error)
+              }
+              console.log("SUCCESS 333342111")
+              resolve(true)
+            }
+          )
+        }
+      )
+    })
+  }
+
+  const task = new Task(job)
+  tradeQueue.addToQueue(task)
+}
+
+const ledger = {};
+
+socket.on("buy_signal", async (signal) => {
+  const pair = getPair(signal);
+  const { minQty, stepSize } = ledger.getMinimums(pair);
+  const tresult = ledger.getUserPayloadIndex(signal);
+  if (!tresult)
+    return false;
+
+  if (!minQty)
+    return console.log("PAIR UNKNOWN")
+
+  if (!ledger.getTraidingPair(signal) && signal.new) {
+    log.buyLong(signal);
+    log.buyPair(ledger, signal);
+    notifier.notifyEnterLongSignal(signal)
+
+    let qty = bnb_client.roundStep(ledger.getStratSignalQuantity(signal), stepSize);
+    log.buyQtyPair(qty, pair);
+
+    if (ledger.getTradingType(signal) === "real")
+      marketBuy(ledger, signal, qty);
+    else
+      registerLongTrade(ledger, signal, qty);
+
+  } else if ( tradeShortEnabled && ledger.getTradingTypes(signal) === "SHORT" && ledger.getTradingQty(signal) && !signal.new && ledger.getOpenTrades(signal) ) {
+    log.buyCoverShort(signal);
+    log.buyPair(ledger, signal);
+    notifier.notifyBuyToCoverSignal(signal)
+
+    let qty = Number(ledger.getTradingQty(signal));
+    log.buyQtyPair(qty, pair);
+    if (ledger.getTradingType(signal) === "real")
+      marketCoverBuy(ledger, signal, qty)
+    else
+      registerLongCoverTrade(ledger, signal)
+  } else {
+    log.buyAgain(signal);
+  }
 })
 
 socket.on("sell_signal", async (signal) => {
