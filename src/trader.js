@@ -220,7 +220,7 @@ socket.on("buy_signal", async (signal) => {
   const pair = getPair(signal);
   const { minQty, stepSize } = ledger.getMinimums(pair);
   const tresult = ledger.getUserPayloadIndex(signal);
-  if (!tresult)
+  if (!tresult > -1)
     return false;
 
   if (!minQty)
@@ -256,11 +256,11 @@ socket.on("buy_signal", async (signal) => {
 })
 
 socket.on("sell_signal", async (signal) => {
-    const tresult = _.findIndex(tradingData.user_payload, (o) => {
-        return o.stratid == signal.stratid
-    })
+  const pair = getPair(signal);
+  const { minQty, stepSize } = ledger.getMinimums(pair);
+  const tresult = ledger.getUserPayloadIndex(signal);
     if (tresult > -1) {
-        if (tradeShortEnabled && !tradingData.trading_pairs[signal.pair + signal.stratid] && signal.new) {
+      if (tradeShortEnabled && !ledger.getTraidingPair(signal) && signal.new) {
             console.log(
                 colors.grey(
                     "SELL_SIGNAL :: ENTER SHORT TRADE ::",
