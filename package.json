@@ -42,5 +42,12 @@
         "socket.io-client": "2.4.0",
         "telebot": "1.4.1",
         "tulind": "0.8.18"
+    },
+    "devDependencies": {
+        "@babel/core": "^7.14.3",
+        "@babel/eslint-parser": "^7.14.3",
+        "@babel/preset-env": "^7.14.2",
+        "eslint": "^7.26.0",
+        "eslint-plugin-node": "^11.1.0"
     }
 }

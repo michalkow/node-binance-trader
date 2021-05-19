@@ -7,6 +7,8 @@ const axios = require("axios")
 const Binance = require("node-binance-api")
 const env = require("./env")
 const Task = require("./utils/task")
+const log = require("./log")
+const Ledger = require("./Ledger")
 const TradeQueue = require("./trade-queue")
 
 const bva_key = env.BVA_API_KEY
@@ -66,67 +68,6 @@ socket.on("message", (message) => {
     console.log(colors.magenta("NBT Message: " + message))
 })
 
-
-
-const log = {
-  buyLong(signal) {
-    console.log(
-      colors.grey(
-        "BUY_SIGNAL :: ENTER LONG TRADE ::",
-        signal.stratname,
-        signal.stratid,
-        signal.pair
-      )
-    )
-  },
-  buyCoverShort(signal) {
-    console.log(
-      colors.grey(
-        "BUY_SIGNAL :: BUY TO COVER SHORT TRADE ::",
-        signal.stratname,
-        signal.stratid,
-        signal.pair
-      )
-    )
-  },
-  buyPair(ledger, signal) {
-    console.log(
-      signal.pair,
-      " ===> BUY",
-      signal.price,
-      Number(ledger.getUserPayload(signal).buy_amount)
-    )
-  },
-  buyQtyPair(qty, pair) {
-    console.log("Market Buy ==> " + qty + " - " + pair)
-  },
-  buyError(error, signal, qty, isMarginPair) {
-    isMarginPair ?
-      console.log("ERROR 3355333", error.body)
-      :
-      console.log(
-        "ERROR 7991117 marketBuy",
-        signal.pair,
-        Number(qty),
-        error.body
-      )
-  },
-  buyCoverError(error, signal, qty) {
-    console.log(
-      "ERROR 6 ",
-      signal.pair,
-      Number(qty),
-      error.body
-    )
-  },
-  buyAgain(signal) {
-    console.log(
-      "BUY AGAIN",
-      JSON.stringify(signal),
-      tradingData.trading_types[signal.pair + signal.stratid]
-    )
-  }
-}
 
 const getAltCoin = signal => signal.pair.replace("BTC", "");
 
@@ -214,7 +155,7 @@ const marketCoverBuy = (ledger, signal, qty) => {
   tradeQueue.addToQueue(task)
 }
 
-const ledger = {};
+const ledger = new Ledger();
 
 socket.on("buy_signal", async (signal) => {
   const pair = getPair(signal);
@@ -259,39 +200,31 @@ socket.on("sell_signal", async (signal) => {
   const pair = getPair(signal);
   const { minQty, stepSize } = ledger.getMinimums(pair);
   const tresult = ledger.getUserPayloadIndex(signal);
-    if (tresult > -1) {
+  if (!tresult > -1)
+    return false;
+
+  if (!minQty)
+    return console.log("PAIR UNKNOWN")
+
+
       if (tradeShortEnabled && !ledger.getTraidingPair(signal) && signal.new) {
-            console.log(
-                colors.grey(
-                    "SELL_SIGNAL :: ENTER SHORT TRADE ::",
-                    signal.stratname,
-                    signal.stratid,
-                    signal.pair
-                )
-            )
-            //notify
-            notifier.notifyEnterShortSignal(signal)
+        log.sellShort(signal);
+        log.sellPair(ledger, signal);
+        notifier.notifyEnterShortSignal(signal)
+        console.log("const alt = signal.pair.replace('BTC', '')")
 
-            console.log(
-                signal.pair,
-                " ===> SELL",
-                signal.price,
-                Number(tradingData.user_payload[tresult].buy_amount)
-            )
-
-            console.log("const alt = signal.pair.replace('BTC', '')")
             const alt = signal.pair.replace("BTC", "")
-            if (tradingData.minimums[alt + "BTC"] && tradingData.minimums[alt + "BTC"].minQty) {
+            if (tradingData.minimums[pair] && tradingData.minimums[pair].minQty) {
                 const buy_amount = new BigNumber(
                     tradingData.user_payload[tresult].buy_amount
                 )
                 const btc_qty = buy_amount.dividedBy(signal.price)
                 const qty = bnb_client.roundStep(
                     btc_qty,
-                    tradingData.minimums[alt + "BTC"].stepSize
+                    tradingData.minimums[pair].stepSize
                 )
                 console.log(
-                    "QTY ===mgBorrow===> " + qty + " - " + alt + "BTC"
+                    "QTY ===mgBorrow===> " + qty + " - " + pair
                 )
                 const traded_sell_signal = {
                     key: bva_key,
@@ -324,7 +257,7 @@ socket.on("sell_signal", async (signal) => {
                                         "SUCESS 444444444 mgMarketSell 44444444"
                                     )
                                     bnb_client.mgMarketSell(
-                                        alt + "BTC",
+                                        pair,
                                         Number(qty),
                                         (error, response) => {
                                             if (error) {
@@ -403,7 +336,7 @@ socket.on("sell_signal", async (signal) => {
             )
 
             const alt = signal.pair.replace("BTC", "")
-            if (tradingData.minimums[alt + "BTC"] && tradingData.minimums[alt + "BTC"].minQty) {
+            if (tradingData.minimums[pair] && tradingData.minimums[pair].minQty) {
                 const qty = tradingData.trading_qty[signal.pair + signal.stratid]
                 ///
                 const traded_sell_signal = {
@@ -416,7 +349,7 @@ socket.on("sell_signal", async (signal) => {
                 }
                 ///
                 if (tradingData.user_payload[tresult].trading_type === "real") {
-                    if (tradingData.margin_pairs.includes(alt + "BTC")) {
+                    if (tradingData.margin_pairs.includes(pair)) {
                         console.log(
                             "QTY =======mgMarketSell======> " +
                             qty +
@@ -427,7 +360,7 @@ socket.on("sell_signal", async (signal) => {
                         const job = async () => {
                             return new Promise((resolve, reject) => {
                                 bnb_client.mgMarketSell(
-                                    alt + "BTC",
+                                    pair,
                                     Number(qty),
                                     (error, response) => {
                                         if (error) {
@@ -481,7 +414,7 @@ socket.on("sell_signal", async (signal) => {
                         const job = async () => {
                             return new Promise((resolve, reject) => {
                                 bnb_client.marketSell(
-                                    alt + "BTC",
+                                    pair,
                                     Number(qty),
                                     (error, response) => {
                                         if (error) {
@@ -553,7 +486,7 @@ socket.on("sell_signal", async (signal) => {
                 tradingData.open_trades[signal.pair + signal.stratid],
                 tradingData.trading_types[signal.pair + signal.stratid]
             )
-        }
+
     }
 })
 
