@@ -17,9 +17,16 @@ export default class Ledger {
     }, tradingData)
   }
 
+  registerShortTrade = (signal, qty) => {
+    this.tradingData.trading_pairs[signal.pair + signal.stratid] = true;
+    this.tradingData.trading_types[signal.pair + signal.stratid] = 'SHORT';
+    this.tradingData.open_trades[signal.pair + signal.stratid] = true;
+    this.tradingData.trading_qty[signal.pair + signal.stratid] = Number(qty);
+  }
+
   registerLongTrade = (signal, qty) => {
     this.tradingData.trading_pairs[signal.pair + signal.stratid] = true;
-    this.tradingData.trading_types[signal.pair + signal.stratid] = "LONG";
+    this.tradingData.trading_types[signal.pair + signal.stratid] = 'LONG';
     this.tradingData.open_trades[signal.pair + signal.stratid] = true;
     this.tradingData.trading_qty[signal.pair + signal.stratid] = Number(qty);
   }
