@@ -19,11 +19,10 @@
     "author": "Herve Fulchiron <herve76@gmail.com>",
     "license": "ISC",
     "scripts": {
-        "start": "node ./src/server.js",
-        "trader": "node ./src/trader.js",
-        "backtest": "node ./src/backtest.js"
+        "start": "node ./src/index.js"
     },
     "dependencies": {
+        "a-promise-queue": "^2.0.0",
         "axios": "0.21.1",
         "bignumber.js": "9.0.1",
         "binance-api-node": "0.10.33",
@@ -47,9 +46,12 @@
         "@babel/core": "^7.14.3",
         "@babel/eslint-parser": "^7.14.3",
         "@babel/node": "^7.14.2",
+        "@babel/plugin-transform-runtime": "^7.14.3",
         "@babel/preset-env": "^7.14.2",
+        "babel-plugin-transform-import-ignore": "^1.1.0",
         "eslint": "^7.26.0",
         "eslint-plugin-editorconfig": "^3.0.2",
-        "eslint-plugin-node": "^11.1.0"
+        "eslint-plugin-node": "^11.1.0",
+        "promise-queue-plus": "^1.2.2"
     }
 }

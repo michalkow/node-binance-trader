@@ -1,7 +1,6 @@
 require('dotenv').config()
 
 const envalid = require('envalid')
-var pjson = require('../package.json')
 
 module.exports = envalid.cleanEnv(process.env, {
   BACKTEST_TEST_PAIR: envalid.str({ default: 'BTCUSDT' }),
@@ -32,5 +31,5 @@ module.exports = envalid.cleanEnv(process.env, {
   }),
   USE_GMAIL: envalid.bool({ default: false }),
   USE_TELEGRAM: envalid.bool({ default: false }),
-  VERSION: envalid.str({ default: pjson.version }),
+  BVA_VERSION: envalid.str(),
 })

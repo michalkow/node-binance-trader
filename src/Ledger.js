@@ -1,8 +1,10 @@
-import { get, findIndex } from 'lodash';
+import { get, findIndex, filter } from 'lodash';
 import BigNumber from 'bignumber.js';
 
-export default class Ledger {
+class Ledger {
   constructor(tradingData = {}) {
+    this.symbols = [];
+    this.futureSymbols = [];
     this.tradingData = Object.assign({
       trading_pairs: {},
       open_trades: {},
@@ -13,8 +15,63 @@ export default class Ledger {
       user_payload: [],
       available_balances: [],
       minimums: {},
-      margin_pairs: [],
+      margin_pairs: []
     }, tradingData)
+  }
+
+  getSymbols = (isFuture) =>
+    isFuture ? this.futureSymbols : this.symbols;
+
+  findSymbol = (pair, isFuture) =>
+    this.getSymbols(isFuture).find(symbol => symbol.symbol === pair || symbol.pair === pair);
+
+  setUserPayload = data => {
+    this.user_payload = data;
+  }
+
+  setSymbols = (symbols, isFuture) => {
+    this[isFuture ? 'futureSymbols' : 'symbols'] = filter(symbols, { contractType: 'PERPETUAL' });
+  }
+
+  getPairStepSize = (pair, isFuture) =>
+    get(get(this.findSymbol(pair, isFuture), 'filters', []).find(({ filterType: 'LOT_SIZE' })), 'stepSize');
+
+
+  setFutureMinimums = (symbol, data) => {
+    this.futureMinimums[symbol] = data;
+  }
+
+  setMarginPairs = data => {
+    this.margin_pairs = data;
+  }
+
+  setMinimums = (symbol, data) => {
+    this.minimums[symbol] = data;
+  }
+
+  updateOpenTradeSignals = signals => {
+    signals.forEach(({ pair, stratid, stopped, type, qty, buy_price, sell_price }) => {
+      this.tradingData.trading_pairs[pair + stratid] = true
+      this.tradingData.open_trades[pair + stratid] = !stopped
+      this.tradingData.trading_types[pair + stratid] = type
+      this.tradingData.trading_qty[pair + stratid] = qty
+      this.tradingData.buy_prices[pair + stratid] = new BigNumber(buy_price)
+      this.tradingData.sell_prices[pair + stratid] = new BigNumber(
+        sell_price
+      )
+    })
+  }
+
+  updateAvailableBalances = balances => {
+    for (let asset in balances) {
+      if (balances[asset].available > 0.0) {
+        this.tradingData.available_balances.push({
+          asset: asset,
+          available: balances[asset].available,
+          onOrder: balances[asset].onOrder,
+        })
+      }
+    }
   }
 
   registerShortTrade = (signal, qty) => {
@@ -66,6 +123,12 @@ export default class Ledger {
     return trading_type;
   }
 
+  getTradingPairs = () =>
+    get(this.tradingData, 'trading_pairs');
+
+  getAvailableBalances = () =>
+    get(this.tradingData, 'available_balances');
+
   getTradingTypes = signal =>
     get(this.tradingData.trading_types, `${signal.pair}${signal.stratid}`);
 
@@ -75,3 +138,7 @@ export default class Ledger {
   getOpenTrades = signal =>
     get(this.tradingData.open_trades, `${signal.pair}${signal.stratid}`);
 }
+
+const ledger = new Ledger();
+
+module.exports = ledger;

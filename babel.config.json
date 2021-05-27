@@ -3,5 +3,15 @@
     [
       "@babel/preset-env"
     ]
+  ],
+  "plugins": [
+    [
+      "babel-plugin-transform-import-ignore",
+      {
+        "patterns": [
+          "p-queue"
+        ]
+      }
+    ]
   ]
 }
