@@ -1,5 +1,24 @@
 const colors = require('colors')
 
+const LogsEnum = {
+  NBT_SOCKET_CONNECTED: {
+    message: 'Auto Trader connected.'
+  }
+}
+
+class Log {
+  constructor(level = 5) {
+    this.level = level;
+  }
+
+  log = (key, ...args) => {
+    if (!LogsEnum[key])
+      return console.log(colors.orange('Missing log key: ' + key));
+    let { level, message, color } = LogsEnum[key];
+    if(level <= this.level)
+      console.log(colors[color](message, ...args))
+  }
+}
 
 const log = {
   socketConnect() {
